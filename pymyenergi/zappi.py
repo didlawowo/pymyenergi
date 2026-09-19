@@ -362,7 +362,7 @@ class Zappi(BaseDevice):
             f"/cgi-zappi-phase-setting-Z{self._serialno}-{phasesetting_int}"
         )
         # Set local data if successful
-        self._data["num_phases"] = PHASES_STRINGS.get(phase)
+        self._data["phaseSetting"] = PHASES_STRINGS.get(phase)
         return True
 
     async def start_boost(self, amount):

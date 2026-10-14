@@ -4,30 +4,46 @@ Cette PR est empilee sur le lot qualite #3. Elle ne fait pas partie de la
 contribution upstream minimale CJNE/pymyenergi#83 et ne doit pas entrer dans la
 premiere adoption Solar par inadvertance.
 
-| Priorite | Correction de cette PR | Effet |
-| --- | --- | --- |
-| P1 | Client HTTP propre a chaque Connection, aclose et contexte async | Fin du client implicite partage ; le client injecte reste propriete de l'appelant. |
-| P1 | Statut HTTP traite avant ASN | 429/500/503 ne sont plus presentes comme de faux mauvais identifiants. |
-| P1 | Tous les timeouts HTTPX, causes preservees | Solar peut distinguer une indisponibilite d'une erreur de programmation ; aucune commande n'est rejouee automatiquement. |
-| P1 | Enums Zappi inconnues | Aucun IndexError ou faux etat provenant d'un index negatif. |
-| P1 | Validation minimum-green 0..100 | Rejet avant reseau ; valeurs texte CLI valides toujours acceptees. |
-| P2 | Serial avant refresh, flag vhub rafraichi | Etat coherent sans attendre une lecture complete. |
-| P2 | Cle energie boost et comparaison Libbi | Correction des lectures/aggregations, pas de nouvelle formule energetique. |
-| P2 | CLI unlock et arguments boost manquants | Plus de commande silencieusement ignoree ou IndexError. |
+## P1 — transport et commandes
 
-## Responsabilites Solar (PR suivante, pas dans la librairie)
+**Client HTTP par connexion.** Chaque Connection possede son client implicite
+et expose aclose ainsi qu'un contexte async. Un client injecte reste propriete
+de l'appelant. Solar devra adapter le cycle de vie de ses connexions avant
+d'adopter ce second lot.
 
-P1 : modes texte conformes au SDK, suppression des appels a des methodes qui
-n'existent pas, rejet explicite d'une consigne en watts non supportee, collecte
-Zappi independante de Harvi et des horaires boost, echec de collecte visible.
-Tests avec le vrai Zappi et seulement la frontiere HTTP simulee.
+**Statuts HTTP et timeouts.** Les erreurs 429/500/503 ne sont plus presentees
+comme des erreurs d'identifiants. Tous les timeouts HTTPX conservent leur cause.
+Aucune commande n'est rejouee automatiquement.
 
-## Non termine / a qualifier avant changement de comportement
+**Valeurs Zappi inconnues.** Les enums invalides ne produisent plus IndexError
+ni faux etat derive d'un index negatif. Le niveau minimum-green est valide entre
+0 et 100 avant le reseau ; les valeurs texte CLI valides restent acceptees.
 
-P2 : authentification Cognito entierement non bloquante et renouvellement OAuth
-concurrent ; sans impact sur le chemin Digest utilise par Solar. P2 : validation
-des contrats des historiques minute/fuseau et des parametres smart-boost avant
-modification des URLs. P2 Solar : confirmation par relecture bornee, cycle de vie
-HTTP unifie entre API/service et extension de la fenetre de rattrapage de 6h.
-Ces points ne sont pas presentes comme corriges. La politique metier de charge,
-la causalite des mesures et les garanties de fraicheur de Solar restent en place.
+## P2 — coherence des donnees et CLI
+
+Le numero configure est disponible avant refresh. Le flag vhub suit les
+nouvelles donnees. L'energie boost utilise la cle produite par l'historique.
+La comparaison Libbi corrigee dans le lot minimal #3 est preservee.
+
+STOP actualise le mode local apres succes sans inventer une transition physique.
+La CLI execute unlock et rejette les arguments boost manquants avant le reseau.
+
+## Responsabilites Solar — PR #333
+
+Modes texte conformes au SDK, suppression des appels a des methodes absentes,
+rejet explicite des consignes en watts non supportees, collecte Zappi
+independante de Harvi et des horaires boost, echec de collecte observable.
+Les tests utilisent le vrai SDK et simulent uniquement la frontiere HTTP.
+
+## Non termine — suivi Solar #334
+
+Restent a qualifier : authentification Cognito entierement non bloquante,
+renouvellement OAuth concurrent, historiques minute et fuseaux, validation
+complete des parametres smart-boost. Le chemin Digest utilise par Solar ne
+depend pas des identifiants OAuth.
+
+Cote Solar restent la confirmation par relecture bornee, les timestamps de
+mesure, le cycle de vie HTTP unifie entre API et service, les autres etats de
+branchement et le rattrapage de l'arret de 6h. Ces points ne sont pas presentes
+comme corriges. La politique metier de charge et les protections de causalite
+et de fraicheur des mesures restent en place.

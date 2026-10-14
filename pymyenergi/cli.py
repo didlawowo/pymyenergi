@@ -33,6 +33,9 @@ async def main(args):
         version = version_file.read().strip()
         print(version)
         sys.exit(0)
+    required = {"boost": 1, "smart-boost": 2}.get(getattr(args, "action", ""), 0)
+    if args.command == ZAPPI and len(getattr(args, "arg", [])) < required:
+        sys.exit("Missing boost arguments; see myenergi zappi --help")
     username = args.username or input("Please enter your hub serial number: ")
     password = args.password or getpass(prompt="Password (apikey): ")
     if not args.skip_oauth:
@@ -82,6 +85,9 @@ async def main(args):
                     else:
                         for key in data.keys():
                             print(f"{key}: {data[key]}kWh")
+                elif args.action == "unlock" and args.command == ZAPPI:
+                    await device.unlock()
+                    print("Unlock requested")
                 elif args.action == "stop" and args.command == ZAPPI:
                     await device.stop_charge()
                     print("Charging was stopped")

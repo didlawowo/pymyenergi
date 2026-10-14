@@ -42,6 +42,9 @@ class MyenergiException(Exception):
             elif self.code > 299:
                 self.message = f"UNKNOWN_ERROR_{self.code}"
 
+    def __str__(self):
+        return self.message or super().__str__()
+
 
 class WrongCredentials(MyenergiException):
     """Class of exceptions for incomplete credentials."""

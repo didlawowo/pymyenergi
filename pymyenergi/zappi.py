@@ -77,7 +77,10 @@ class Zappi(BaseDevice):
     @property
     def charge_mode(self):
         """Charge mode, one of Fast, Eco, Eco+ and Stopped"""
-        return CHARGE_MODES[self._data.get("zmo", 0)]
+        value = self._data.get("zmo", 0)
+        if type(value) is not int or not 0 <= value < len(CHARGE_MODES):
+            return "Unknown"
+        return CHARGE_MODES[value]
 
     @property
     def charge_added(self):
@@ -132,7 +135,10 @@ class Zappi(BaseDevice):
     @property
     def status(self):
         """Current status, one of Paused, Charging or Completed"""
-        return STATES[self._data.get("sta", 1)]
+        value = self._data.get("sta", 1)
+        if type(value) is not int or not 0 <= value < len(STATES):
+            return "Unknown"
+        return STATES[value]
 
     @property
     def plug_status(self):
@@ -197,7 +203,9 @@ class Zappi(BaseDevice):
     @property
     def energy_boost(self):
         """Device boosted energy from history data"""
-        return self.history_data.get("boost_total", 0)
+        return self.history_data.get(
+            "device_boosted", self.history_data.get("boost_total", 0)
+        )
 
     @property
     def energy_green(self):
@@ -334,6 +342,7 @@ class Zappi(BaseDevice):
     async def stop_charge(self):
         """Stop charge"""
         await self._connection.get(f"/cgi-zappi-mode-Z{self._serialno}-4-0-0-0000")
+        self._data["zmo"] = 4
         return True
 
     async def stop_boost(self):
@@ -353,6 +362,10 @@ class Zappi(BaseDevice):
 
     async def set_minimum_green_level(self, level):
         """Set minimum green level 0-100"""
+        if isinstance(level, str) and level.isdecimal():
+            level = int(level)
+        if type(level) is not int or not 0 <= level <= 100:
+            raise ValueError("Minimum green level must be an integer from 0 to 100")
         await self._connection.get(f"/cgi-set-min-green-Z{self._serialno}-{level}")
         # Set local data if successful
         self._data["mgl"] = level
@@ -360,7 +373,7 @@ class Zappi(BaseDevice):
 
     async def set_phase_setting(self, phase):
         """Set phase setting, can be set 1/3/auto"""
-        if phase not in PHASE_SETTING:
+        if not isinstance(phase, str) or phase not in PHASE_SETTING:
             raise ValueError("Phase setting must be one of: 1, 3, auto")
         phasesetting_int = PHASE_SETTING[phase]
         await self._connection.get(

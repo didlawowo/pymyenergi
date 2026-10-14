@@ -5,6 +5,7 @@ Python Package for connecting to myenergi API.
 """
 
 import logging
+import sys
 from typing import Text
 
 import httpx
@@ -29,13 +30,12 @@ class Connection:
         app_password: Text = None,
         app_email: Text = None,
         timeout: int = 20,
-        asyncClient=httpx.AsyncClient(),
+        asyncClient=None,
     ) -> None:
         """Initialize connection object."""
         self.timeout = timeout
         self.director_url = "https://director.myenergi.net"
         self.base_url = None
-        self.asyncClient = asyncClient
         self.oauth_base_url = "https://myaccount.myenergi.com"
         self.username = username
         self.password = password
@@ -43,6 +43,8 @@ class Connection:
         self.app_email = app_email
         if self.username is None or self.password is None:
             raise TypeError("Hub serial number and API key must be provided")
+        self._owns_client = asyncClient is None
+        self.asyncClient = httpx.AsyncClient() if asyncClient is None else asyncClient
         self.auth = httpx.DigestAuth(self.username, self.password)
         self.headers = {"User-Agent": "Wget/1.14 (linux-gnu)"}
         if self.app_email and self.app_password:
@@ -53,17 +55,14 @@ class Connection:
         self.invitation_id = ""
         _LOGGER.debug("New connection created")
 
-    def _checkMyenergiServerURL(self, responseHeader):
+    def _checkMyenergiServerURL(self, responseHeader, required=True):
         if "X_MYENERGI-asn" in responseHeader:
             new_url = "https://" + responseHeader["X_MYENERGI-asn"]
             if new_url != self.base_url:
                 _LOGGER.info(f"Updated myenergi active server to {new_url}")
             self.base_url = new_url
-        else:
-            _LOGGER.debug(
-                "Myenergi ASN not found in Myenergi header, assume auth failure (bad username)"
-            )
-            raise WrongCredentials()
+        elif required or self.base_url is None:
+            raise MyenergiException("Myenergi response lacks an active server header")
 
     async def discoverLocations(self):
         if self.app_email and self.app_password:
@@ -102,8 +101,8 @@ class Connection:
                         headers=self.oauth_headers,
                         timeout=self.timeout,
                     )
-                except httpx.ReadTimeout:
-                    raise TimeoutException()
+                except httpx.TimeoutException as exc:
+                    raise TimeoutException("Myenergi request timed out") from exc
                 else:
                     _LOGGER.debug(f"{method} status {response.status_code}")
                     if response.status_code == 200:
@@ -112,7 +111,7 @@ class Connection:
                         raise WrongCredentials()
                     raise MyenergiException(response.status_code)
             else:
-                _LOGGER.error("Trying to use OAuth without app credentials")
+                raise WrongCredentials("App credentials are required for OAuth")
 
         # Use Digest Auth for director.myenergi.net and s18.myenergi.net
         else:
@@ -127,12 +126,19 @@ class Connection:
                         headers=self.headers,
                         timeout=self.timeout,
                     )
+                except httpx.TimeoutException as exc:
+                    raise TimeoutException() from exc
                 except Exception:
-                    _LOGGER.exception("Myenergi server request problem")
+                    _LOGGER.error("Myenergi server request problem")
+                    _LOGGER.debug(sys.exc_info()[0])
                     raise
                 else:
-                    self.do_query_asn = False
+                    if response.status_code == 401:
+                        raise WrongCredentials(401)
+                    if response.status_code != 200:
+                        raise MyenergiException(response.status_code)
                     self._checkMyenergiServerURL(response.headers)
+                    self.do_query_asn = False
             theUrl = self.base_url + url
             try:
                 _LOGGER.debug(f"{method} {url} {theUrl}")
@@ -144,14 +150,14 @@ class Connection:
                     timeout=self.timeout,
                     json=json,
                 )
-            except httpx.ReadTimeout:
+            except httpx.TimeoutException as exc:
                 # Make sure to query for ASN next request, might be a server problem
                 self.do_query_asn = True
-                raise TimeoutException()
+                raise TimeoutException("Myenergi request timed out") from exc
             else:
                 _LOGGER.debug(f"GET status {response.status_code}")
-                self._checkMyenergiServerURL(response.headers)
                 if response.status_code == 200:
+                    self._checkMyenergiServerURL(response.headers, required=False)
                     return response.json()
                 elif response.status_code == 401:
                     raise WrongCredentials()
@@ -170,3 +176,14 @@ class Connection:
 
     async def delete(self, url, data=None, oauth=False):
         return await self.send("DELETE", url, data, oauth)
+
+    async def aclose(self):
+        """Close only the HTTP client owned by this connection."""
+        if self._owns_client:
+            await self.asyncClient.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        await self.aclose()

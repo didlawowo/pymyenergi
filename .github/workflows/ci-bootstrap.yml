@@ -21,11 +21,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: true
-      - name: Format only, with an AST equivalence check
+      - name: Apply exact type migration, then verify formatter AST equivalence
         id: format
         shell: bash
         run: |
           set -euo pipefail
+          uv run --no-project --python 3.12 python ci_bootstrap_typing.py
           uv run --no-project --python 3.12 python - <<'PY'
           import ast
           import json
@@ -47,20 +48,20 @@ jobs:
           for p in python_files:
               after = ast.dump(ast.parse(p.read_text()), include_attributes=False)
               if before[str(p)] != after:
-                  raise SystemExit(f"Refusing a semantic change in {p}")
+                  raise SystemExit(f"Refusing a semantic formatter change in {p}")
           changed = [p for p in git("diff", "--name-only", "-z").split("\0") if p]
           if any(p not in before and p != "README.md" for p in changed):
-              raise SystemExit(f"Unexpected formatter changes: {changed}")
+              raise SystemExit(f"Unexpected changes: {changed}")
           if changed:
               subprocess.run(["git", "add", "--", *changed], check=True)
               subprocess.run(["git", "-c", "user.name=github-actions[bot]", "-c",
                               "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-                              "commit", "-m", "style: align legacy sources with the shared Ruff formatter"], check=True)
-              # A concurrent user update makes this ordinary push fail; no force.
+                              "commit", "-m", "fix: resolve CI type diagnostics without device command changes"], check=True)
+              # A concurrent update makes this ordinary push fail; no force.
               subprocess.run(["git", "push", "origin", "HEAD:refs/heads/ci/shared-workflow-v1.18.3"], check=True)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"sha={git('rev-parse', 'HEAD')}\n")
-          print(json.dumps({"base": original, "head": git("rev-parse", "HEAD"), "formatted": changed}))
+          print(json.dumps({"base": original, "head": git("rev-parse", "HEAD"), "changed": changed}))
           PY
 
   diagnostics:
@@ -77,20 +78,14 @@ jobs:
       - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
         with:
           python-version: "3.12"
-      - name: Collect type diagnostics without replacing the required CI gates
-        shell: bash
-        run: |
-          set +e
-          uv run mypy --no-incremental pymyenergi > mypy-bootstrap.txt 2>&1
-          status=$?
-          set -e
-          printf '%s\n' "$status" > mypy-bootstrap-exit-code.txt
-          cat mypy-bootstrap.txt
+      - name: Validate type corrections
+        run: uv run mypy --no-incremental pymyenergi
+      - name: Run full offline tests
+        run: uv run pytest tests -q --timeout=9
+      - uses: didlawowo/workflow-ci/.github/actions/precommit-contract@v1.18.3
       - uses: actions/upload-artifact@v6
+        if: always()
         with:
-          name: ci-bootstrap-diagnostics
-          path: |
-            uv.lock
-            mypy-bootstrap.txt
-            mypy-bootstrap-exit-code.txt
+          name: ci-bootstrap-lock
+          path: uv.lock
           retention-days: 1

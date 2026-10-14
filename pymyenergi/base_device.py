@@ -203,7 +203,7 @@ class BaseDevice(ABC):
     @property
     def serial_number(self):
         """Serial Number"""
-        return self._data.get("sno", None)
+        return self._data.get("sno", self._serialno)
 
     @property
     def firmware_version(self):
@@ -239,6 +239,7 @@ class BaseDevice(ABC):
     def data(self, value):
         """Set all device data"""
         self._data = value
+        self.is_vhub_enabled = self._data.get("isVHubEnabled", False)
         self.refresh_ct_groups()
 
     def refresh_ct_groups(self):

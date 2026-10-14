@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv python install 3.12
+          uv python install 3.12 3.9
           uv venv /tmp/pymyenergi-portable --python 3.12
           uv pip install --python /tmp/pymyenergi-portable/bin/python -r requirements_test.txt pytest-socket
           mkdir -p docs
@@ -49,7 +49,7 @@ jobs:
       - name: Run the full existing suite and new offline regressions
         run: |
           /tmp/pymyenergi-portable/bin/python -m pytest tests -q --asyncio-mode=auto --disable-socket --allow-unix-socket --timeout=9 --junitxml=/tmp/portable-library-tests.xml
-          /tmp/pymyenergi-portable/bin/flake8 pymyenergi tests
+          uvx --python 3.9 --from flake8==3.9.2 flake8 pymyenergi tests
           /tmp/pymyenergi-portable/bin/black --check pymyenergi tests
       - name: Publish the tested branch without the preparation workflow
         shell: bash

@@ -1,67 +1,100 @@
-name: Linting
+name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - dev
+    branches: [main, master, dev]
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
   workflow_dispatch:
 
-env:
-  DEFAULT_PYTHON: 3.9
+permissions:
+  contents: read
+
+# Do not reuse the central workflow's concurrency group: it would cancel itself.
+concurrency:
+  group: pymyenergi-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  shared-ci:
+    name: Shared Python CI
+    permissions:
+      contents: write
+      actions: read
+      issues: read
+      pull-requests: write
+      security-events: write
+    uses: didlawowo/workflow-ci/.github/workflows/ci.yml@v1.18.3
+    with:
+      repo-type: python
+      runner: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}
+      python-version: "3.12"
+      python-source-path: pymyenergi
+      python-test-command: >-
+        uv run --no-sync pytest tests -q --timeout=9
+        --cov=pymyenergi --cov-report=term-missing
+        --cov-report=xml:coverage-reports/coverage.xml
+        --junitxml=coverage-reports/pytest-report.xml
+      docker-enabled: false
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
+
   pre-commit:
-    runs-on: "ubuntu-latest"
-    name: Pre-commit
+    name: Pre-commit contract
+    runs-on: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}
+    timeout-minutes: 20
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4.2.2
-      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
-        uses: actions/setup-python@v5.3.0
+      - uses: actions/checkout@v6
         with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
+          persist-credentials: false
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+        with:
+          python-version: "3.12"
+      - uses: didlawowo/workflow-ci/.github/actions/precommit-contract@v1.18.3
 
-      - name: Upgrade pip
-        run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
-          pip --version
-
-      - name: Install Python modules
-        run: |
-          pip install --constraint=.github/workflows/constraints.txt pre-commit black flake8 reorder-python-imports
-
-      - name: Run pre-commit on all files
-        run: |
-          pre-commit run --all-files --show-diff-on-failure --color=always
-
-  tests:
-    runs-on: "ubuntu-latest"
-    name: Run tests
+  compatibility:
+    name: Python ${{ matrix.python-version }} compatibility
+    runs-on: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.12", "3.13"]
+        python-version: ["3.9", "3.13"]
     steps:
-      - name: Check out code from GitHub
-        uses: "actions/checkout@v4.2.2"
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: "actions/setup-python@v5.3.0"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install requirements
-        run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
-          pip install -r requirements_test.txt
-      - name: Tests suite
-        run: |
-          pytest \
-            --timeout=9 \
-            --durations=10 \
-            -n auto \
-            -p no:sugar \
-            tests
+      # Resolve the newest compatible test tools for each interpreter. The uv
+      # developer group intentionally requires 3.12; the library does not.
+      - name: Install library and compatibility test dependencies
+        run: >-
+          python -m pip install . pytest pytest-asyncio pytest-cov pytest-httpx
+          pytest-socket pytest-timeout pytest-xdist
+      - name: Run offline tests
+        run: python -m pytest tests -q --timeout=9
+
+  package:
+    name: Build and check distributions
+    runs-on: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+        with:
+          python-version: "3.12"
+      - name: Build wheel and source distribution
+        run: uv run python -m build
+      - name: Validate package metadata
+        run: uv run twine check --strict dist/*
+      - uses: actions/upload-artifact@v6
+        with:
+          name: python-distributions
+          path: dist/*
+          retention-days: 7

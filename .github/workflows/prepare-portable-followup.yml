@@ -28,10 +28,21 @@ jobs:
             git show "5ae97282d80d5f796196b7d2b6fe3fa44bf3c6d5:$path" > "$path"
           done
           python3 - <<'PY'
+          import ast
+          import subprocess
           from pathlib import Path
           path = Path('docs/quality-priorities.md')
           text = path.read_text().replace('lot qualite #1', 'lot qualite #3').replace('CJNE/pymyenergi#84', 'CJNE/pymyenergi#83')
           path.write_text(text)
+          original = subprocess.check_output(['git', 'show', '850d3ff5b4b2d2371c717cf11f237a6e9041844b:pymyenergi/zappi.py'], text=True)
+          tree = ast.parse(original)
+          method = next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == 'set_phase_setting')
+          call = next(n.exc for n in ast.walk(method) if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call))
+          message = ast.literal_eval(call.args[0])
+          path = Path('pymyenergi/zappi.py')
+          text = path.read_text()
+          assert text.count('"Phase must be one of: 1, 3, auto"') == 1
+          path.write_text(text.replace('"Phase must be one of: 1, 3, auto"', repr(message)))
           PY
           /tmp/pymyenergi-portable/bin/black pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py
           uvx --from isort==5.13.2 isort --force-single-line --profile=black pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py

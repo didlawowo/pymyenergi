@@ -1,6 +1,6 @@
 # Development and CI
 
-The fork uses `didlawowo/workflow-ci` **v1.18.3**. Runtime changes and fixes to
+The fork uses `didlawowo/workflow-ci` **v1.18.4**. Runtime changes and fixes to
 myenergi commands are reviewed separately from this CI integration.
 
 ## Local checks

@@ -128,15 +128,12 @@ class Connection:
                         headers=self.headers,
                         timeout=self.timeout,
                     )
-                except httpx.TimeoutException as exc:
-                    raise TimeoutException() from exc
                 except Exception:
                     _LOGGER.error("Myenergi server request problem")
                     _LOGGER.debug(sys.exc_info()[0])
-                    raise
                 else:
-                    self._checkMyenergiServerURL(response.headers)
                     self.do_query_asn = False
+                    self._checkMyenergiServerURL(response.headers)
             theUrl = self.base_url + url
             try:
                 _LOGGER.debug(f"{method} {url} {theUrl}")

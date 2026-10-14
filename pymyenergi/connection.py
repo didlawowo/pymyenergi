@@ -3,6 +3,7 @@
 Python Package for connecting to myenergi API.
 
 """
+
 import logging
 import sys
 from typing import Text

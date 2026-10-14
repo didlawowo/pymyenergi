@@ -300,7 +300,7 @@ class MyenergiClient:
         all_devices = list(self.devices.values())
         if kind == "all":
             return all_devices
-        return list(filter(lambda d: (d.kind == kind), all_devices))
+        return list(filter(lambda d: d.kind == kind, all_devices))
 
     async def show(self):
         out = ""

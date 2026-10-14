@@ -1,0 +1,63 @@
+name: Verify portable second reliability batch
+on:
+  push:
+    branches: [prepare/portable-followup-20261014]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'didlawowo/pymyenergi' && github.actor == 'didlawowo'
+    runs-on: arc-runner-pymyenergi
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Transfer only already-tested source and regression modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv python install 3.12
+          uv venv /tmp/pymyenergi-portable --python 3.12
+          uv pip install --python /tmp/pymyenergi-portable/bin/python -r requirements_test.txt pytest-socket
+          mkdir -p docs
+          for path in pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py docs/quality-priorities.md; do
+            git show "5ae97282d80d5f796196b7d2b6fe3fa44bf3c6d5:$path" > "$path"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('docs/quality-priorities.md')
+          text = path.read_text().replace('lot qualite #1', 'lot qualite #3').replace('CJNE/pymyenergi#84', 'CJNE/pymyenergi#83')
+          path.write_text(text)
+          PY
+          /tmp/pymyenergi-portable/bin/black pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py
+          uvx --from isort==5.13.2 isort --force-single-line --profile=black pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py
+      - name: Run the full existing suite and new offline regressions
+        run: |
+          /tmp/pymyenergi-portable/bin/python -m pytest tests -q --asyncio-mode=auto --disable-socket --allow-unix-socket --timeout=9 --junitxml=/tmp/portable-library-tests.xml
+          /tmp/pymyenergi-portable/bin/flake8 pymyenergi tests
+          /tmp/pymyenergi-portable/bin/black --check pymyenergi tests
+      - name: Publish the tested branch without the preparation workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git reset --mixed 850d3ff5b4b2d2371c717cf11f237a6e9041844b
+          rm .github/workflows/prepare-portable-followup.yml
+          git add pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_low_risk_quality.py tests/test_transport_followup.py docs/quality-priorities.md
+          git commit -m 'fix: harden Solar-facing SDK transport and data contracts'
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/fix/solar-priority-followup
+          echo "FOLLOWUP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: portable-library-followup-evidence
+          path: /tmp/portable-library-tests.xml
+          retention-days: 7

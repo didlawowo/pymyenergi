@@ -3,6 +3,7 @@
 Python Package for connecting to myenergi API.
 
 """
+
 import logging
 import sys
 from typing import Text
@@ -41,6 +42,8 @@ class Connection:
         self.password = password
         self.app_password = app_password
         self.app_email = app_email
+        if self.username is None or self.password is None:
+            raise TypeError("Hub serial number and API key must be provided")
         self.auth = httpx.DigestAuth(self.username, self.password)
         self.headers = {"User-Agent": "Wget/1.14 (linux-gnu)"}
         if self.app_email and self.app_password:

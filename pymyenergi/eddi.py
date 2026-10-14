@@ -47,7 +47,7 @@ class Eddi(BaseDevice):
         """Return CT key names that are not none"""
         keys = {}
         for i in range(3):
-            ct = getattr(self, f"ct{i+1}")
+            ct = getattr(self, f"ct{i + 1}")
             if ct.name_as_key == "ct_none":
                 continue
             keys[ct.name_as_key] = keys.get(ct.name_as_key, 0) + 1

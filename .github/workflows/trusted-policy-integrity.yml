@@ -1,0 +1,16 @@
+name: Trusted policy integrity
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  integrity:
+    # Central verification only: never check out or execute the PR in this event.
+    uses: didlawowo/workflow-ci/.github/workflows/policy-integrity.yml@v1.18.4
+    with:
+      runner: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}

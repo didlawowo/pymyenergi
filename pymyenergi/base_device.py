@@ -4,6 +4,7 @@ from abc import abstractmethod
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Dict
 
 from pymyenergi.connection import Connection
 
@@ -64,7 +65,7 @@ class BaseDevice(ABC):
         self._data = data or {}
         self._name = None
         self.is_vhub_enabled = self._data.get("isVHubEnabled", False)
-        self.ct_groups = {}
+        self.ct_groups: Dict[str, float] = {}
         self.refresh_ct_groups()
 
     @property
@@ -180,12 +181,13 @@ class BaseDevice(ABC):
             return_data["pv_total"] = round(energy_wh["pvp1"] / 1000, 2)
 
         for i in range(6):
-            key = f"ct{i+1}"
+            key = f"ct{i + 1}"
             if hasattr(self, key):
                 ct_key = getattr(self, key).name_as_key
                 if ct_key != "ct_none":
                     return_data[ct_key] = round(
-                        (return_data.get(ct_key, 0) + (energy_wh[f"ct{i+1}"] / 1000)), 2
+                        (return_data.get(ct_key, 0) + (energy_wh[f"ct{i + 1}"] / 1000)),
+                        2,
                     )
         return return_data
 
@@ -233,21 +235,21 @@ class BaseDevice(ABC):
         """All device data"""
         return self._data
 
-    def refresh_ct_groups(self):
-        groups = {}
-        for i in range(6):
-            key = f"ct{i+1}"
-            if hasattr(self, key):
-                ct = getattr(self, key)
-                if ct.name_as_key != "ct_none":
-                    groups[ct.name_as_key] = groups.get(ct.name_as_key, 0) + ct.power
-        self.ct_groups = groups
-
     @data.setter
     def data(self, value):
         """Set all device data"""
         self._data = value
         self.refresh_ct_groups()
+
+    def refresh_ct_groups(self):
+        groups = {}
+        for i in range(6):
+            key = f"ct{i + 1}"
+            if hasattr(self, key):
+                ct = getattr(self, key)
+                if ct.name_as_key != "ct_none":
+                    groups[ct.name_as_key] = groups.get(ct.name_as_key, 0) + ct.power
+        self.ct_groups = groups
 
     async def refresh_history_data(self, from_date, how_long, resolution):
         """Refresh device history data"""

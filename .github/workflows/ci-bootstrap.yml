@@ -1,0 +1,96 @@
+name: Temporary CI bootstrap
+
+on:
+  push:
+    branches: [ci/shared-workflow-v1.18.3]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    if: github.repository == 'didlawowo/pymyenergi' && github.actor == 'didlawowo'
+    runs-on: arc-runner-pymyenergi
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.format.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - name: Format only, with an AST equivalence check
+        id: format
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.12 python - <<'PY'
+          import ast
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+
+          original = git("rev-parse", "HEAD")
+          tracked = git("ls-files", "-z").split("\0")
+          python_files = [pathlib.Path(p) for p in tracked if p.endswith(".py")]
+          before = {
+              str(p): ast.dump(ast.parse(p.read_text()), include_attributes=False)
+              for p in python_files
+          }
+          subprocess.run(["uvx", "--from", "ruff==0.16.8", "ruff", "format", "."], check=True)
+          for p in python_files:
+              after = ast.dump(ast.parse(p.read_text()), include_attributes=False)
+              if before[str(p)] != after:
+                  raise SystemExit(f"Refusing a semantic change in {p}")
+          changed = [p for p in git("diff", "--name-only", "-z").split("\0") if p]
+          if any(p not in before and p != "README.md" for p in changed):
+              raise SystemExit(f"Unexpected formatter changes: {changed}")
+          if changed:
+              subprocess.run(["git", "add", "--", *changed], check=True)
+              subprocess.run(["git", "-c", "user.name=github-actions[bot]", "-c",
+                              "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+                              "commit", "-m", "style: align legacy sources with the shared Ruff formatter"], check=True)
+              # A concurrent user update makes this ordinary push fail; no force.
+              subprocess.run(["git", "push", "origin", "HEAD:refs/heads/ci/shared-workflow-v1.18.3"], check=True)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"sha={git('rev-parse', 'HEAD')}\n")
+          print(json.dumps({"base": original, "head": git("rev-parse", "HEAD"), "formatted": changed}))
+          PY
+
+  diagnostics:
+    needs: format
+    runs-on: arc-runner-pymyenergi
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.format.outputs.sha }}
+          persist-credentials: false
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+        with:
+          python-version: "3.12"
+      - name: Collect type diagnostics without replacing the required CI gates
+        shell: bash
+        run: |
+          set +e
+          uv run mypy --no-incremental pymyenergi > mypy-bootstrap.txt 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > mypy-bootstrap-exit-code.txt
+          cat mypy-bootstrap.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ci-bootstrap-diagnostics
+          path: |
+            uv.lock
+            mypy-bootstrap.txt
+            mypy-bootstrap-exit-code.txt
+          retention-days: 1

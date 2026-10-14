@@ -9,7 +9,9 @@ from pymyenergi.connection import Connection
 from pymyenergi.zappi import Zappi
 
 
-@pytest.mark.parametrize("username,password", [(None, "key"), ("hub", None), (None, None)])
+@pytest.mark.parametrize(
+    "username,password", [(None, "key"), ("hub", None), (None, None)]
+)
 def test_missing_hub_credentials_fail_without_network(username, password):
     transport = AsyncMock()
     with pytest.raises(TypeError, match="Hub serial number and API key"):

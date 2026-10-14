@@ -1,3 +1,6 @@
+from typing import Any
+from typing import Dict
+
 from pymyenergi.connection import Connection
 
 from . import LIBBI
@@ -93,7 +96,7 @@ class Libbi(BaseDevice):
 
     def __init__(self, connection: Connection, serialno, data={}) -> None:
         self.history_data = {}
-        self._extra_data = {}
+        self._extra_data: Dict[str, Any] = {}
         super().__init__(connection, serialno, data)
 
     async def refresh_extra(self):

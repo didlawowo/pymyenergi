@@ -1,6 +1,10 @@
 import logging
 from datetime import datetime
 from datetime import timezone
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Union
 
 from pymyenergi.connection import Connection
 
@@ -16,6 +20,7 @@ from . import HOUR
 from . import LIBBI
 from . import VOLTAGE_GRID
 from . import ZAPPI
+from .base_device import BaseDevice
 from .eddi import Eddi
 from .harvi import Harvi
 from .libbi import Libbi
@@ -45,11 +50,11 @@ class MyenergiClient:
         connection: Connection,
     ) -> None:
         self._connection = connection
-        self.devices = {}
-        self._data = []
+        self.devices: Dict[Union[int, str], BaseDevice] = {}
+        self._data: List[Dict[str, Any]] = []
         self._keys = None
-        self._totals = {}
-        self._history_totals = {}
+        self._totals: Dict[str, float] = {}
+        self._history_totals: Dict[str, float] = {}
         self._update_available = False
         self._firmware_version = ""
 

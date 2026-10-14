@@ -25,7 +25,7 @@ jobs:
       issues: read
       pull-requests: write
       security-events: write
-    uses: didlawowo/workflow-ci/.github/workflows/ci.yml@v1.18.3
+    uses: didlawowo/workflow-ci/.github/workflows/ci.yml@v1.18.4
     with:
       repo-type: python
       runner: ${{ vars.RUNNER || format('arc-runner-{0}', github.event.repository.name) }}
@@ -49,10 +49,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.4
         with:
           python-version: "3.12"
-      - uses: didlawowo/workflow-ci/.github/actions/precommit-contract@v1.18.3
+      - uses: didlawowo/workflow-ci/.github/actions/precommit-contract@v1.18.4
 
   compatibility:
     name: Python ${{ matrix.python-version }} compatibility
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.4
         with:
           python-version: "3.12"
       - name: Build wheel and source distribution

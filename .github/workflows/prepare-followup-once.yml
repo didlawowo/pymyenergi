@@ -1,0 +1,89 @@
+name: Prepare Solar-priority library followup
+on:
+  push:
+    branches: [prepare/library-followup-20261014]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'didlawowo/pymyenergi' && github.actor == 'didlawowo'
+    runs-on: arc-runner-pymyenergi
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: didlawowo/workflow-ci/.github/actions/setup-python-env@v1.18.3
+        with:
+          python-version: "3.12"
+      - name: Apply reviewed second-lot changes
+        run: |
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+          def edit(name, before, after):
+              path = Path(name)
+              text = path.read_text()
+              assert text.count(before) == 1, (name, before)
+              path.write_text(text.replace(before, after, 1))
+          c = 'pymyenergi/connection.py'
+          edit(c, '        asyncClient=httpx.AsyncClient(),', '        asyncClient=None,')
+          edit(c, '        self.asyncClient = asyncClient\n', '')
+          edit(c, '        self.auth = httpx.DigestAuth(self.username, self.password)', '        self._owns_client = asyncClient is None\n        self.asyncClient = httpx.AsyncClient() if asyncClient is None else asyncClient\n        self.auth = httpx.DigestAuth(self.username, self.password)')
+          edit(c, '    def _checkMyenergiServerURL(self, responseHeader):', '    def _checkMyenergiServerURL(self, responseHeader, required=True):')
+          edit(c, '        else:\n            _LOGGER.debug(\n                "Myenergi ASN not found in Myenergi header, assume auth failure (bad username)"\n            )\n            raise WrongCredentials()', '        elif required or self.base_url is None:\n            raise MyenergiException("Myenergi response lacks an active server header")')
+          edit(c, '                _LOGGER.error("Trying to use OAuth without app credentials")', '                raise WrongCredentials("App credentials are required for OAuth")')
+          edit(c, '                    self._checkMyenergiServerURL(response.headers)\n                    self.do_query_asn = False', '                    if response.status_code == 401:\n                        raise WrongCredentials(401)\n                    if response.status_code != 200:\n                        raise MyenergiException(response.status_code)\n                    self._checkMyenergiServerURL(response.headers)\n                    self.do_query_asn = False')
+          edit(c, '                self._checkMyenergiServerURL(response.headers)\n                if response.status_code == 200:\n                    return response.json()', '                if response.status_code == 200:\n                    self._checkMyenergiServerURL(response.headers, required=False)\n                    return response.json()')
+          path = Path(c)
+          text = path.read_text()
+          assert text.count('except httpx.ReadTimeout:') == 2
+          text = text.replace('except httpx.ReadTimeout:', 'except httpx.TimeoutException as exc:')
+          text = text.replace('raise TimeoutException()\n', 'raise TimeoutException("Myenergi request timed out") from exc\n')
+          text += '\n    async def aclose(self):\n        """Close only the HTTP client owned by this connection."""\n        if self._owns_client:\n            await self.asyncClient.aclose()\n\n    async def __aenter__(self):\n        return self\n\n    async def __aexit__(self, exc_type, exc_value, traceback):\n        await self.aclose()\n'
+          path.write_text(text)
+          e = 'pymyenergi/exceptions.py'
+          edit(e, '\n\nclass WrongCredentials', '\n    def __str__(self):\n        return self.message or super().__str__()\n\n\nclass WrongCredentials')
+          z = 'pymyenergi/zappi.py'
+          edit(z, '        return CHARGE_MODES[self._data.get("zmo", 0)]', '        value = self._data.get("zmo", 0)\n        if type(value) is not int or not 0 <= value < len(CHARGE_MODES):\n            return "Unknown"\n        return CHARGE_MODES[value]')
+          edit(z, '        return STATES[self._data.get("sta", 1)]', '        value = self._data.get("sta", 1)\n        if type(value) is not int or not 0 <= value < len(STATES):\n            return "Unknown"\n        return STATES[value]')
+          edit(z, '        return self.history_data.get("boost_total", 0)', '        return self.history_data.get("device_boosted", self.history_data.get("boost_total", 0))')
+          edit(z, '        await self._connection.get(f"/cgi-set-min-green-Z{self._serialno}-{level}")', '        if isinstance(level, str) and level.isdecimal():\n            level = int(level)\n        if type(level) is not int or not 0 <= level <= 100:\n            raise ValueError("Minimum green level must be an integer from 0 to 100")\n        await self._connection.get(f"/cgi-set-min-green-Z{self._serialno}-{level}")')
+          b = 'pymyenergi/base_device.py'
+          edit(b, '        return self._data.get("sno", None)', '        return self._data.get("sno", self._serialno)')
+          edit(b, '        self._data = value\n        self.refresh_ct_groups()', '        self._data = value\n        self.is_vhub_enabled = self._data.get("isVHubEnabled", False)\n        self.refresh_ct_groups()')
+          edit('pymyenergi/client.py', 'or device == LIBBI:', 'or device.kind == LIBBI:')
+          cli = 'pymyenergi/cli.py'
+          edit(cli, '    username = args.username or input(', '    required = {"boost": 1, "smart-boost": 2}.get(getattr(args, "action", ""), 0)\n    if args.command == ZAPPI and len(getattr(args, "arg", [])) < required:\n        sys.exit("Missing boost arguments; see myenergi zappi --help")\n    username = args.username or input(')
+          edit(cli, '                elif args.action == "stop" and args.command == ZAPPI:', '                elif args.action == "unlock" and args.command == ZAPPI:\n                    await device.unlock()\n                    print("Unlock requested")\n                elif args.action == "stop" and args.command == ZAPPI:')
+          PY
+          uv run ruff format pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_transport_followup.py
+      - name: Validate full offline suite and static checks
+        run: |
+          uv run --no-sync pytest tests -q --timeout=9 --junitxml=/tmp/library-followup.xml
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy --no-incremental pymyenergi
+      - name: Publish only reviewed source changes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git reset --mixed 8b0024a619d37be73c3d3d5bfdf48aeceacfb4a2
+          rm .github/workflows/prepare-followup-once.yml
+          git add pymyenergi/connection.py pymyenergi/exceptions.py pymyenergi/zappi.py pymyenergi/base_device.py pymyenergi/client.py pymyenergi/cli.py tests/test_transport_followup.py docs/quality-priorities.md
+          git commit -m 'fix: harden transport ownership and Solar-facing SDK contracts'
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/fix/solar-priority-hardening
+          echo "FOLLOWUP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: library-followup-evidence
+          path: /tmp/library-followup.xml
+          retention-days: 7

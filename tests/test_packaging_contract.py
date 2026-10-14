@@ -1,6 +1,7 @@
 """Protect the public package identity during CI/build-system migration."""
 
 from importlib import metadata
+from importlib import resources
 from pathlib import Path
 
 
@@ -28,6 +29,5 @@ def test_console_entry_point_is_preserved():
     assert matches == ["pymyenergi.cli:cli"]
 
 
-def test_version_file_is_in_the_distribution():
-    distribution = metadata.distribution("pymyenergi")
-    assert distribution.locate_file("pymyenergi/VERSION").is_file()
+def test_version_file_is_available_in_installed_package():
+    assert resources.files("pymyenergi").joinpath("VERSION").is_file()

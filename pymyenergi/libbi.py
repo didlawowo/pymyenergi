@@ -1,3 +1,6 @@
+from typing import Any
+from typing import Dict
+
 from pymyenergi.connection import Connection
 
 from . import LIBBI
@@ -93,7 +96,7 @@ class Libbi(BaseDevice):
 
     def __init__(self, connection: Connection, serialno, data={}) -> None:
         self.history_data = {}
-        self._extra_data = {}
+        self._extra_data: Dict[str, Any] = {}
         super().__init__(connection, serialno, data)
 
     async def refresh_extra(self):
@@ -135,7 +138,7 @@ class Libbi(BaseDevice):
         """Return CT key names that are not none"""
         keys = {}
         for i in range(6):
-            ct = getattr(self, f"ct{i+1}")
+            ct = getattr(self, f"ct{i + 1}")
             if ct.name_as_key == "ct_none":
                 continue
             keys[ct.name_as_key] = keys.get(ct.name_as_key, 0) + 1

@@ -221,3 +221,36 @@ async def test_cli_unlock_calls_the_existing_sdk_method(monkeypatch):
     )
     await main(args)
     device.unlock.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_discovery", [False, True])
+async def test_cli_closes_owned_connection_on_success_and_discovery_failure(
+    monkeypatch, fail_discovery
+):
+    connection = AsyncMock(spec=Connection)
+    if fail_discovery:
+        connection.discoverLocations.side_effect = WrongCredentials("invalid")
+    device = AsyncMock(spec=Zappi)
+    monkeypatch.setattr("pymyenergi.cli.Connection", lambda *args: connection)
+    monkeypatch.setattr("pymyenergi.cli.device_factory", lambda *args: device)
+    args = SimpleNamespace(
+        version=False,
+        username="hub",
+        password="key",
+        skip_oauth=False,
+        app_email="offline@example.invalid",
+        app_password="offline",
+        debug=False,
+        command=ZAPPI,
+        serial=123,
+        action="unlock",
+        arg=[],
+        json=False,
+    )
+    if fail_discovery:
+        with pytest.raises(SystemExit):
+            await main(args)
+    else:
+        await main(args)
+    connection.aclose.assert_awaited_once()

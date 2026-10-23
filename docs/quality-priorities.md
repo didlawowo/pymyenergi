@@ -1,8 +1,9 @@
 # Second lot — priorites pour Solar Monitoring
 
-Cette PR est empilee sur le lot qualite #3. Elle ne fait pas partie de la
-contribution upstream minimale CJNE/pymyenergi#83 et ne doit pas entrer dans la
-premiere adoption Solar par inadvertance.
+Ce guide accompagne le report du second lot sur main du fork. La premiere
+fusion de ce lot ciblait une branche deja fusionnee : elle ne l'avait pas
+integre a main. Ce report conserve le lot minimal et la migration CI/type-check.
+La contribution upstream minimale CJNE/pymyenergi#83 reste distincte.
 
 | Priorite | Correction de cette PR | Effet |
 | --- | --- | --- |

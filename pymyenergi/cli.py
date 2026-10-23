@@ -50,12 +50,12 @@ async def main(args):
         app_email = ""
         app_password = ""
     conn = Connection(username, password, app_password, app_email)
-    if app_email and app_password:
-        await conn.discoverLocations()
-    if args.debug:
-        logging.root.setLevel(logging.DEBUG)
-    client = MyenergiClient(conn)
     try:
+        if app_email and app_password:
+            await conn.discoverLocations()
+        if args.debug:
+            logging.root.setLevel(logging.DEBUG)
+        client = MyenergiClient(conn)
         if args.command == "list":
             devices = await client.get_devices(args.kind)
             for device in devices:
@@ -177,6 +177,8 @@ async def main(args):
             )
     except WrongCredentials:
         sys.exit("Wrong username or password")
+    finally:
+        await conn.aclose()
 
 
 def cli():

@@ -43,14 +43,14 @@ class Connection:
         self.app_email = app_email
         if self.username is None or self.password is None:
             raise TypeError("Hub serial number and API key must be provided")
-        self._owns_client = asyncClient is None
-        self.asyncClient = httpx.AsyncClient() if asyncClient is None else asyncClient
         self.auth = httpx.DigestAuth(self.username, self.password)
         self.headers = {"User-Agent": "Wget/1.14 (linux-gnu)"}
         if self.app_email and self.app_password:
             self.oauth = Cognito(_USER_POOL_ID, _CLIENT_ID, username=self.app_email)
             self.oauth.authenticate(password=self.app_password)
             self.oauth_headers = {"Authorization": f"Bearer {self.oauth.access_token}"}
+        self._owns_client = asyncClient is None
+        self.asyncClient = httpx.AsyncClient() if asyncClient is None else asyncClient
         self.do_query_asn = True
         self.invitation_id = ""
         _LOGGER.debug("New connection created")

@@ -254,3 +254,23 @@ async def test_cli_closes_owned_connection_on_success_and_discovery_failure(
     else:
         await main(args)
     connection.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_oauth_constructor_does_not_allocate_owned_http_client(
+    monkeypatch,
+):
+    from unittest.mock import MagicMock
+
+    cognito = MagicMock()
+    cognito.authenticate.side_effect = RuntimeError("authentication failed")
+    client_factory = MagicMock()
+    monkeypatch.setattr(
+        "pymyenergi.connection.Cognito", lambda *args, **kwargs: cognito
+    )
+    monkeypatch.setattr("pymyenergi.connection.httpx.AsyncClient", client_factory)
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        Connection(
+            "hub", "key", app_email="offline@example.invalid", app_password="offline"
+        )
+    client_factory.assert_not_called()

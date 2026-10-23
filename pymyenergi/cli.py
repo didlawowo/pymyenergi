@@ -33,6 +33,9 @@ async def main(args):
         version = version_file.read().strip()
         print(version)
         sys.exit(0)
+    required = {"boost": 1, "smart-boost": 2}.get(getattr(args, "action", ""), 0)
+    if args.command == ZAPPI and len(getattr(args, "arg", [])) < required:
+        sys.exit("Missing boost arguments; see myenergi zappi --help")
     username = args.username or input("Please enter your hub serial number: ")
     password = args.password or getpass(prompt="Password (apikey): ")
     if not args.skip_oauth:
@@ -47,12 +50,12 @@ async def main(args):
         app_email = ""
         app_password = ""
     conn = Connection(username, password, app_password, app_email)
-    if app_email and app_password:
-        await conn.discoverLocations()
-    if args.debug:
-        logging.root.setLevel(logging.DEBUG)
-    client = MyenergiClient(conn)
     try:
+        if app_email and app_password:
+            await conn.discoverLocations()
+        if args.debug:
+            logging.root.setLevel(logging.DEBUG)
+        client = MyenergiClient(conn)
         if args.command == "list":
             devices = await client.get_devices(args.kind)
             for device in devices:
@@ -82,6 +85,9 @@ async def main(args):
                     else:
                         for key in data.keys():
                             print(f"{key}: {data[key]}kWh")
+                elif args.action == "unlock" and args.command == ZAPPI:
+                    await device.unlock()
+                    print("Unlock requested")
                 elif args.action == "stop" and args.command == ZAPPI:
                     await device.stop_charge()
                     print("Charging was stopped")
@@ -171,6 +177,8 @@ async def main(args):
             )
     except WrongCredentials:
         sys.exit("Wrong username or password")
+    finally:
+        await conn.aclose()
 
 
 def cli():

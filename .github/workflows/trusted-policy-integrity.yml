@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   integrity:
+    # pull_request_target ignores contributor approval: no job at all for forks.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     # Central verification only: never check out or execute the PR in this event.
     uses: didlawowo/workflow-ci/.github/workflows/policy-integrity.yml@v1.18.4
     with:
